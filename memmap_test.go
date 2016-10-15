@@ -282,3 +282,39 @@ func TestRacingDeleteAndClose(t *testing.T) {
 	}()
 	close(in)
 }
+
+func TestRacingOpenFileWithOCreate(t *testing.T) {
+	fs := NewMemMapFs()
+	pathname := "testfile"
+
+	done := make(chan bool)
+	errs := make(chan error)
+
+	mkfile := func() {
+		_, err := fs.OpenFile(pathname, os.O_CREATE|os.O_EXCL, 0644)
+		if err != nil {
+			errs <- err
+		} else {
+			done <- true
+		}
+	}
+
+	n := 100
+	c := 0
+
+	for i := 0; i < n; i++ {
+		go mkfile()
+	}
+
+	for i := 0; i < n; i++ {
+		select {
+		case <-errs:
+		case <-done:
+			c = c + 1
+		}
+	}
+
+	if c != 1 {
+		t.Error("Should have created only one file")
+	}
+}
